@@ -105,11 +105,13 @@ def obj_gifts(k, g) :
         gift_happiness = -1 * int_rel_happiness
     return int(gift_happiness)
 
+ls_set = [(k, g) for k in ls_kids for g in ar_child_wishlist[k]]
+
 dict_obj = {
     (k,g) :
-    (int_gift_pref - np.where(ar_child_wishlist[k]==g)[0]) + \
-    (int_child_pref - np.where(ar_gift_wishlist[g]==k)[0]) * int_rel_happiness
-    for k in ls_kids for g in ar_child_wishlist[k]
+    int(int_gift_pref - np.where(ar_child_wishlist[k]==g)[0]) + \
+    int(int_child_pref - np.where(ar_gift_wishlist[g]==k)[0]) * int_rel_happiness
+    for (k, g) in ls_set
 }
     
 #==============================================================================
@@ -120,7 +122,7 @@ prob = pp.LpProblem("Santa optimisation", pp.LpMaximize)
 
 # Variable
 cat = pp.LpVariable.dicts(
-        'sel', ((k, g) for k in ls_kids for g in ar_child_wishlist[k]), 
+        'sel', ls_set, 
         lowBound = 0, upBound = 1, cat = 'Integer')
 
 # Objective
@@ -128,28 +130,28 @@ cat = pp.LpVariable.dicts(
 #        (obj_child(k, g)+obj_gifts(k, g))*cat[k,g]  
 #        #for g in ls_gifts for k in ls_kids])
 #        for k in ls_kids for g in ar_child_wishlist[k]])
-prob += pp.lpSum([dict_obj(k,g)*cat[k,g] for k in ls_kids for g in ar_child_wishlist[k]])
+prob += pp.lpSum([dict_obj[k,g]*cat[k,g] for (k, g) in ls_set])
 
 # Constraint 1 - one gift per child
 for k in ls_kids: 
-    prob += pp.lpSum([cat[k, g] for g in ls_gifts]) == 1
+    prob += pp.lpSum([cat[k, g] for g in ls_gifts if (k,g) in ls_set]) == 1
     
 # Constraint 2 - Only 1000 of each gift
 for g in ls_gifts: 
-    prob += pp.lpSum([cat[k, g] for k in ls_kids]) <= int_gifts_max
+    prob += pp.lpSum([cat[k, g] for k in ls_kids if (k,g) in ls_set]) <= int_gifts_max
     
 # Constraint 3 - twins have same gifts
 for k in ls_twins:
     for g in ls_gifts:
-        prob += cat[k[0], g] - cat[k[1], g] == 0
+        if (k,g) in ls_set:
+            prob += cat[k[0], g] - cat[k[1], g] == 0
 
-    
 prob.solve()
 print pp.LpStatus[prob.status]
-yo = {(k, g): cat[k,g].varValue for g in ls_gifts for k in ls_kids}
+yo = {(k, g): cat[k,g].varValue for (k, g) in ls_set}
 #var_obj = sum([
 #    (obj_child(k, g) +  obj_gifts(k, g))*cat[k,g].varValue
 #    for g in ls_gifts for k in ls_kids])
 var_obj = sum([
     (dict_obj(k,g))*cat[k,g].varValue
-    for g in ls_gifts for k in ls_kids])
+    for (k, g) in ls_set])
